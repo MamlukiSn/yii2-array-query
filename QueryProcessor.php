@@ -41,6 +41,8 @@ class QueryProcessor extends Component
         'OR LIKE' => 'filterLikeCondition',
         'OR NOT LIKE' => 'filterLikeCondition',
         'CALLBACK' => 'filterCallbackCondition',
+        'INTERSECT' => 'filterItersectCondition',
+        'NOT INTERSECT' => 'filterItersectCondition',
     ];
 
     /**
@@ -513,6 +515,59 @@ class QueryProcessor extends Component
                 default:
                     throw new InvalidParamException("Operator '$operator' is not supported.");
             }
+        });
+    }
+
+    /**
+     * Applies 'array_intersect' filter to condition. Column must hold an array of values
+     *
+     * @param array $data data to be filtered
+     * @param string $operator operator
+     * @param array $operands the first operand is the column name.
+     * The second operand is an array of values that column value should be among
+     *
+     * @return array filtered data
+     *
+     * @throws InvalidParamException if wrong number of operands have been given
+     */
+    protected function filterItersectCondition(array $data, $operator, $operands)
+    {
+        
+
+        if (!isset($operands[0], $operands[1])) {
+            throw new InvalidParamException("Operator '$operator' requires two operands.");
+        }
+        list($column, $values) = $operands;
+        
+        if ($values === [] || $column === []) {
+            return $operator === 'INTERSECT' ? [] : $data;
+        }
+        $values = (array) $values;
+        
+        if (count($column) > 1) {
+            throw new InvalidParamException("Operator '$operator' allows only a single column.");
+        }
+        if (is_array($column)) {
+            $column = reset($column);
+        }
+        foreach ($values as $i => $value) {
+            if (is_array($value)) {
+                $values[$i] = isset($value[$column]) ? $value[$column] : null;
+            }
+        }
+        if (strncmp('NOT', $operator, 3) === 0) {
+            return array_filter($data, function ($row) use ($column, $values) {
+                if (!is_array($row[$column])) {
+                   return !array_intersect([$row[$column]], $values);
+                }
+                return !array_intersect($row[$column], $values);
+            });
+        }
+        return array_filter($data, function ($row) use ($column, $values) {
+            if (!is_array($row[$column])) {
+               return array_intersect([$row[$column]], $values);
+            }
+            return array_intersect($row[$column], $values);
         });
     }
 }
